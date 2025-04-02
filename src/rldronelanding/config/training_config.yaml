@@ -11,3 +11,5 @@ policy: "MlpPolicy"
 log_dir: "logs/ppo/"
 model_save_path: "models/ppo_drone"
 render: false
+enable_wind: true
+enable_platform_motion: true

@@ -6,20 +6,26 @@ import pybullet_data
 import time
 
 class DroneLandingEnv(gym.Env):
-	def __init__(self, render_mode = None) -> None:
+	def __init__(self, render_mode = None, enable_wind:bool=False, enable_platform_motion:bool=False, platform_speed:float=1.0) -> None:
 		super().__init__()
 		self.render_mode = render_mode
 		self.time_step = 1.0 / 60.0
 		self.max_steps = 500
 		self.current_step = 0
+		self.step_counter = 0
 		self.space_limit = 10.0
 		self.platform_start = [0, 0, -0.5]
+		self.platform_speed = platform_speed
 		self.platform_surface_z = self.platform_start[2] + 1.0
 
+		self.enable_wind = enable_wind
+		self.enable_platform_motion = enable_platform_motion
+		self.wind_force_range = [-2.0, 2.0]
+
+		obs_limit = np.array([20.0] * 10, dtype=np.float32)
 		self.observation_space = spaces.Box(
-			low=-np.inf,
-			high=np.inf,
-			shape=(10,),
+			low=-obs_limit,
+			high=obs_limit,
 			dtype=np.float32
 		)
 
@@ -40,6 +46,7 @@ class DroneLandingEnv(gym.Env):
 	def reset(self, seed=None, options=None):
 		super().reset(seed=seed)
 		self.current_step = 0
+		self.step_counter = 0
 		p.resetSimulation()
 		p.setGravity(0, 0, -9.81)
 		p.loadURDF("plane.urdf")
@@ -49,7 +56,11 @@ class DroneLandingEnv(gym.Env):
 		z = np.random.uniform(4, 8)
 
 		self.drone = p.loadURDF("sphere_small.urdf", [x, y, z])
+		assert self.drone is not None, "Drone was not created"
+
 		self.platform = p.loadURDF("cube.urdf", self.platform_start, globalScaling=2.0, useFixedBase=True)
+		assert self.platform is not None, "Platform was not created"
+
 
 		obs = self._get_obs()
 		return obs, {}
@@ -59,9 +70,31 @@ class DroneLandingEnv(gym.Env):
 		force = np.clip(action, -1.0, 1.0) * 10.0
 		p.applyExternalForce(self.drone, -1, force, [0, 0, 0], p.WORLD_FRAME)
 		p.stepSimulation()
+		self.step_counter += 1
 
 		if self.render_mode == "human":
 			time.sleep(self.time_step)
+
+		if self.enable_wind:
+			wind_x = np.random.uniform(*self.wind_force_range)
+			wind_y = np.random.uniform(*self.wind_force_range)
+			p.applyExternalForce(
+				objectUniqueId=self.drone,
+				linkIndex=-1,
+				forceObj=[wind_x, wind_y, 0],
+				posObj=[0, 0, 0],
+				flags=p.WORLD_FRAME
+			)
+
+		if self.enable_platform_motion:
+			sim_time = self.current_step * self.time_step
+			t = sim_time * self.platform_speed
+			new_x = self.platform_start[0] + np.sin(t) * 0.5
+			p.resetBasePositionAndOrientation(
+				self.platform,
+				[new_x, self.platform_start[1], self.platform_start[2]],
+				[0, 0, 0, 1]
+			)
 
 		obs = self._get_obs()
 		reward, terminated, truncated = self._compute_reward(obs)

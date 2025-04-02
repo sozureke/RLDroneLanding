@@ -12,17 +12,20 @@ from rldronelanding.envs.drone_landing_env import DroneLandingEnv
 
 
 def load_config(config_path: str):
-  with open(config_path, "r") as f:
-    return yaml.safe_load(f)
+    with open(config_path, "r") as f:
+        return yaml.safe_load(f)
 
 
-def make_env(render: bool = False):
-  def _init():
-    env = DroneLandingEnv(render_mode="human" if render else None)
-    env = Monitor(env)
-    return env
+def make_env(render: bool = False, wind: bool = False, platform_motion: bool = False):
+    def _init():
+        env = DroneLandingEnv(
+            render_mode="human" if render else None,
+            enable_wind=wind,
+            enable_platform_motion=platform_motion
+        )
+        return Monitor(env)
+    return _init
 
-  return _init
 
 def main():
     parser = argparse.ArgumentParser()
@@ -35,11 +38,28 @@ def main():
         default=300_000,
         help="Total number of training timesteps",
     )
+    parser.add_argument("--wind", action="store_true", help="Enable wind force")
+    parser.add_argument("--moving-platform", action="store_true", help="Enable moving landing platform")
 
     args = parser.parse_args()
     config = load_config(args.config)
 
-    env = DummyVecEnv([make_env(render=config["render"])])
+    wind_enabled = args.wind or config.get("enable_wind", False)
+    platform_motion_enabled = args.moving_platform or config.get("enable_platform_motion", False)
+
+    print("🚀 Training configuration:")
+    print(f"→ Timesteps: {args.timesteps}")
+    print(f"→ Wind Enabled: {'Yes' if args.wind else 'No'}")
+    print(f"→ Moving Platform Enabled: {'Yes' if args.moving_platform else 'No'}")
+    print()
+
+    env = DummyVecEnv([
+        make_env(
+            render=config.get("render", False),
+            wind=wind_enabled,
+            platform_motion=platform_motion_enabled
+        )
+    ])
     env = VecMonitor(env)
 
     os.makedirs(config["log_dir"], exist_ok=True)
@@ -71,9 +91,10 @@ def main():
     )
 
     model.save(config["model_save_path"])
-    print("✅ The training is complete. The model has been saved.")
+    print("The training is complete. The model has been saved.")
 
     env.close()
 
+
 if __name__ == "__main__":
-  main()
+    main()
