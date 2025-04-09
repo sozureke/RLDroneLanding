@@ -1,13 +1,17 @@
 algorithm: ppo
-total_timesteps: 5_000_000
-learning_rate: 0.0001
-gamma: 0.99
+total_timesteps: 5000000
+learning_rate: 0.0003               
+learning_rate_schedule: linear       
+gamma: 0.995
 batch_size: 128
-n_steps: 2048
-ent_coef: 0.02
+n_steps: 1024
+ent_coef: 0.03
 clip_range: 0.2
 gae_lambda: 0.95
 policy: "MlpPolicy"
+policy_kwargs:
+  net_arch: [256, 256]
+  ortho_init: true
 log_dir: "logs/ppo/"
 model_save_path: "models/ppo_drone"
 render: false

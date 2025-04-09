@@ -1,20 +1,18 @@
+from typing import Callable, Dict, Any, Optional
 import yaml
 import os
 import argparse
-
-
+import gymnasium as gym
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecMonitor
 from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback, CallbackList
 from stable_baselines3.common.monitor import Monitor
-
 from rldronelanding.envs.drone_landing_env import DroneLandingEnv
-
 
 class ProgressiveDifficultyCallback(BaseCallback):
     def __init__(
         self,
-        env,
+        env: DummyVecEnv,
         interval: int = 20000,
         speed_increment: float = 0.2,
         max_speed: float = 2.5,
@@ -29,8 +27,8 @@ class ProgressiveDifficultyCallback(BaseCallback):
         self.max_speed = max_speed
         self.noise_increment = noise_increment
         self.max_noise = max_noise
-        self.current_speed = None
-        self.current_noise = None
+        self.current_speed: Optional[float] = None
+        self.current_noise: Optional[float] = None
 
     def _on_training_start(self) -> None:
         self.current_speed = self.env.get_attr("platform_speed")[0]
@@ -38,12 +36,10 @@ class ProgressiveDifficultyCallback(BaseCallback):
 
     def _on_step(self) -> bool:
         if self.n_calls % self.interval == 0:
-            # Increase platform speed
             new_speed = min(self.current_speed + self.speed_increment, self.max_speed)
             self.env.env_method("set_platform_speed", speed=new_speed)
             self.current_speed = new_speed
 
-            # Increase sensor noise
             new_noise = min(self.current_noise + self.noise_increment, self.max_noise)
             self.env.env_method("set_sensor_noise", noise_std=new_noise)
             self.current_noise = new_noise
@@ -51,13 +47,20 @@ class ProgressiveDifficultyCallback(BaseCallback):
             print(f"\n Difficulty increased! Platform: {new_speed:.1f}m/s, Noise: {new_noise:.2f}")
         return True
 
-def load_config(config_path: str):
+def load_config(config_path: str) -> Dict[str, Any]:
     with open(config_path, "r") as f:
         return yaml.safe_load(f)
 
-def make_env(render=False, wind=False, platform_motion=False, platform_speed=1.0, sensor_noise=0.0, drone_scale=1.0):
-    def _init():
-        env = DroneLandingEnv(
+def make_env(
+    render: bool = False,
+    wind: bool = False,
+    platform_motion: bool = False,
+    platform_speed: float = 1.0,
+    sensor_noise: float = 0.0,
+    drone_scale: float = 1.0
+) -> Callable[[], gym.Env]:
+    def _init() -> gym.Env:
+        return DroneLandingEnv(
             render_mode="human" if render else None,
             enable_wind=wind,
             enable_platform_motion=platform_motion,
@@ -65,9 +68,7 @@ def make_env(render=False, wind=False, platform_motion=False, platform_speed=1.0
             sensor_noise_std=sensor_noise,
             drone_scale=drone_scale
         )
-        return env
     return _init
-
 
 def main() -> None:
     parser = argparse.ArgumentParser()
